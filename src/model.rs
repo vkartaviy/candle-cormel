@@ -85,7 +85,7 @@ impl CoreMLModel {
 
             autoreleasepool(|_| {
                 let url =
-                    unsafe { NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy())) };
+                    NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
 
                 // Helper: load from URL with or without configuration (preserve function_name)
                 unsafe fn load_with_config(
@@ -626,11 +626,9 @@ impl CoreMLModel {
                     (cache_meta.modified(), source_meta.modified())
                 {
                     if cache_modified >= source_modified {
-                        let url = unsafe {
-                            NSURL::fileURLWithPath(&NSString::from_str(
-                                &cache_path.to_string_lossy(),
-                            ))
-                        };
+                        let url = NSURL::fileURLWithPath(&NSString::from_str(
+                            &cache_path.to_string_lossy(),
+                        ));
 
                         match unsafe {
                             if let Some(func) = function_name {
@@ -682,7 +680,7 @@ impl CoreMLModel {
         }
 
         // Get the path from the compiled URL
-        let compiled_path_str = unsafe { compiled_url.path() };
+        let compiled_path_str = compiled_url.path();
         if compiled_path_str.is_none() {
             return Err(CandleError::Msg("Invalid compiled model URL".to_string()));
         }

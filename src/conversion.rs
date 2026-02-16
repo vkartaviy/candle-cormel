@@ -46,10 +46,14 @@ pub fn convert_mlmultiarray_to_tensor(
 
     match data_type {
         MLMultiArrayDataType::Float32 => {
-            // Extract as float values
-            for i in 0..count {
-                let val = unsafe { marray.objectAtIndexedSubscript(i as isize) }.floatValue();
-                buf.push(val);
+            // SAFETY: CoreML provides a valid buffer of `count` f32 values.
+            // Bulk copy via dataPointer avoids 1 ObjC call per element.
+            unsafe {
+                #[allow(deprecated)]
+                let data_ptr = marray.dataPointer();
+                let f32_slice =
+                    std::slice::from_raw_parts(data_ptr.as_ptr().cast::<f32>(), count);
+                buf.extend_from_slice(f32_slice);
             }
         }
         MLMultiArrayDataType::Int32 => {

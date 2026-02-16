@@ -86,16 +86,14 @@ impl CacheManager {
     /// Get the current bundle identifier using NSBundle (macOS only)
     #[cfg(target_os = "macos")]
     fn get_current_bundle_identifier() -> Option<String> {
-        unsafe {
-            let main_bundle = NSBundle::mainBundle();
-            let bundle_id = main_bundle.bundleIdentifier();
+        let main_bundle = NSBundle::mainBundle();
+        let bundle_id = main_bundle.bundleIdentifier();
 
-            bundle_id.map(|id| {
-                let bundle_str = id.to_string();
-                debug!("📱 Current bundle identifier: {}", bundle_str);
-                bundle_str
-            })
-        }
+        bundle_id.map(|id| {
+            let bundle_str = id.to_string();
+            debug!("📱 Current bundle identifier: {}", bundle_str);
+            bundle_str
+        })
     }
 
     /// Get the current bundle identifier (non-macOS fallback)
