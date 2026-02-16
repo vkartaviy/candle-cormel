@@ -572,8 +572,11 @@ impl QwenModel {
         Ok(generated_tokens)
     }
 
-    /// Generate tokens using combined top-k + temperature sampling similar to Python reference script.
-    /// If top_k is Some(k) and k > 0, restrict sampling to top-k logits; if temperature <= 0 use greedy within that set.
+    /// Generate tokens using combined top-k + temperature sampling.
+    ///
+    /// Tokenizes the prompt once and prefills the KV cache once upfront.
+    /// Each generation step only runs infer (single-token) + LM head + sampling,
+    /// appending the new token ID directly without re-tokenization.
     pub fn generate_tokens_topk_temp(
         &mut self,
         text: &str,
@@ -582,20 +585,24 @@ impl QwenModel {
         top_k: Option<usize>,
     ) -> Result<Vec<i64>, CandleError> {
         use crate::utils::sampling;
+
+        // Initialize KV cache and causal mask once
+        if self.unified_state.is_none() || self.cached_causal_mask.is_none() {
+            self.initialize_states()?;
+        }
+
+        // Tokenize prompt ONCE (was: re-tokenized every iteration)
+        let mut tokens = self.tokenize(text)?;
+
+        // Prefill all prompt tokens ONCE to populate KV cache
+        self.run_chatpy_prefill(&tokens, tokens.len())?;
+
         let mut generated_tokens = Vec::new();
-        let mut current_text = text.to_string();
 
         for _ in 0..max_tokens {
-            // Ensure stateful pipeline progresses: run forward_text to build caches & get greedy logits via infer path
-            // Adapt forward_text to expose logits by duplicating last steps inline
-            if self.unified_state.is_none() || self.cached_causal_mask.is_none() {
-                self.initialize_states()?;
-            }
-            let tokens = self.tokenize(&current_text)?;
             let context_pos = tokens.len();
-            // Cache embeddings & run chunked prefill only first time or when context grows
-            self.run_chatpy_prefill(&tokens, context_pos)?;
-            // Run infer to get logits tensor
+
+            // Infer: compute hidden states for the last token only
             let hidden_states = self.get_infer_hidden_states(&tokens, context_pos)?;
             let position_ids = self
                 .config
@@ -625,17 +632,17 @@ impl QwenModel {
             };
 
             generated_tokens.push(next_token);
+
             // Stop if EOS
             if next_token == 151_645 {
                 // TODO: obtain dynamically from tokenizer special tokens
                 break;
             }
-            if let Ok(decoded) = self.tokenizer.decode(&[next_token as u32], false) {
-                current_text.push_str(&decoded);
-            } else {
-                break;
-            }
+
+            // Append token ID directly — no string decode + re-tokenize round-trip
+            tokens.push(next_token);
         }
+
         Ok(generated_tokens)
     }
 
